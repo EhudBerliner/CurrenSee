@@ -85,21 +85,37 @@ async function fetchFrankfurter(symbols = null) {
 }
 
 function populateDropdown(availableCurrencies) {
+    // הגנה: ודא שקיבלנו מערך תקין, אם לא - השתמש במטבעות המובילים כברירת מחדל
+    if (!availableCurrencies || !Array.isArray(availableCurrencies)) {
+        availableCurrencies = [...topCurrencies];
+    }
+
     const currentVal = sourceCurrency.value || localStorage.getItem('default_currency') || 'ILS';
     sourceCurrency.innerHTML = '';
     
-    const rest = availableCurrencies.filter(c => !topCurrencies.includes(c)).sort();
+    // סינון המטבעות המשניים בצורה בטוחה
+    const rest = availableCurrencies.filter(c => c && !topCurrencies.includes(c)).sort();
     
     const createOption = (code) => {
+        if (!code) return;
         const opt = document.createElement('option');
         opt.value = code;
         opt.textContent = currencyDictionary[code] || code;
         sourceCurrency.appendChild(opt);
     };
     
+    // הוספת המטבעות הראשיים תמיד!
     topCurrencies.forEach(createOption);
+    
+    // הוספת שאר המטבעות מהעולם (אם קיימים בסינכרון)
     rest.forEach(createOption);
-    if (availableCurrencies.includes(currentVal)) sourceCurrency.value = currentVal;
+    
+    // הגדרת ערך ברירת המחדל
+    if (availableCurrencies.includes(currentVal)) {
+        sourceCurrency.value = currentVal;
+    } else {
+        sourceCurrency.value = 'ILS';
+    }
 }
 
 async function fetchRates(forceRefresh = false) {
