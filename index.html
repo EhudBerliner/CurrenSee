@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ממיר מט"ח חכם</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007bff">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
+    <style>
+        :root { --bg-color: #f4f7f6; --card-bg: #ffffff; --text-color: #333; --primary: #007bff; --primary-hover: #0056b3; --keypad-bg: #f1f3f5; }
+        body { font-family: system-ui, -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 15px; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow-x: hidden; }
+        .container { background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; max-width: 400px; position: relative; }
+        
+        /* המבורגר ותפריט צד */
+        .menu-btn { cursor: pointer; font-size: 1.5rem; position: absolute; top: 15px; right: 15px; z-index: 100; user-select: none; }
+        .nav-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 999; }
+        .nav-overlay.active { display: block; }
+        .nav-menu { position: fixed; top: 0; right: -280px; width: 240px; height: 100%; background: white; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 1000; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); padding: 20px; overflow-y: auto; }
+        .nav-menu.active { right: 0; }
+        .menu-item { display: block; padding: 15px 10px; border-bottom: 1px solid #eee; cursor: pointer; font-weight: bold; font-size: 1rem; color: #444; transition: background 0.2s; border-radius: 8px;}
+        .menu-item:hover { background: #f8f9fa; color: var(--primary); }
+        .menu-header { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid var(--primary); }
+
+        h1 { text-align: center; font-size: 1.4rem; margin-top: 5px; margin-bottom: 20px; }
+        .input-group { margin-bottom: 15px; position: relative; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.95rem; }
+        select, input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 1.2rem; box-sizing: border-box; background-color: #fff; }
+        input:focus, select:focus { border-color: var(--primary); outline: none; }
+        .clear-input-btn { position: absolute; left: 80px; bottom: 12px; background: none; border: none; font-size: 1.2rem; color: #999; cursor: pointer; }
+        
+        .history-wrapper { margin-bottom: 15px; }
+        .history-title { font-size: 0.8rem; color: #666; margin-bottom: 5px; }
+        .history-container { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
+        .history-container::-webkit-scrollbar { display: none; }
+        .history-chip { background: #e9ecef; padding: 6px 12px; border-radius: 15px; font-size: 0.85rem; white-space: nowrap; cursor: pointer; border: 1px solid #dee2e6; }
+        
+        .results { background: #f9f9f9; padding: 12px; border-radius: 8px; border-right: 4px solid var(--primary); margin-bottom: 20px; }
+        .result-item { display: flex; justify-content: space-between; padding: 8px 0; font-size: 1.1rem; }
+        .result-item:not(:last-child) { border-bottom: 1px solid #eee; }
+        
+        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+        .key-btn { background: var(--keypad-bg); border: none; border-radius: 8px; padding: 15px; font-size: 1.5rem; font-weight: bold; cursor: pointer; user-select: none; }
+        .key-btn:active { background: #dee2e6; }
+        .key-btn.action { color: var(--primary); background: #e9ecef; }
+
+        .footer-info { font-size: 0.8rem; color: #555; text-align: center; border-top: 1px solid #eee; padding-top: 10px; line-height: 1.5; }
+        .update-time { font-weight: bold; color: var(--primary); }
+        
+        .toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 350px; pointer-events: none; }
+        .toast { background: #333; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-top: 10px; display: flex; opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(20px); pointer-events: auto; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.error { background: #dc3545; border-right: 5px solid #bd2130; }
+        .toast.success { background: #28a745; border-right: 5px solid #1e7e34; }
+        .toast.warning { background: #ffc107; color: #212529; border-right: 5px solid #d39e00; }
+        
+        /* מצלמה OCR Modal */
+        .camera-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; flex-direction: column; }
+        .camera-modal.active { display: flex; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="menu-btn" id="menuBtn">☰</div>
+    <h1>ממיר מטבעות חכם</h1>
+    
+    <div class="input-group">
+        <label for="sourceCurrency">מטבע מקור:</label>
+        <select id="sourceCurrency"></select>
+    </div>
+
+    <div class="input-group">
+        <label for="amountInput">סכום להמרה:</label>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="amountInput" placeholder="0" inputmode="none" value="1000" style="flex: 1;">
+            <button id="btnStartScanner" style="background: var(--primary); color: white; border: none; border-radius: 8px; padding: 0 15px; font-size: 1.4rem; cursor: pointer;">📷</button>
+        </div>
+        <button id="clearInputBtn" class="clear-input-btn">✕</button>
+    </div>
+
+    <div class="history-wrapper">
+        <div class="history-title">חיפושים אחרונים:</div>
+        <div class="history-container" id="historyContainer"></div>
+    </div>
+
+    <div class="results">
+        <div class="result-item" id="ilsRow"><span>שקל (ILS):</span><span id="ilsResult">0.00</span></div>
+        <div class="result-item" id="usdRow"><span>דולר (USD):</span><span id="usdResult">0.00</span></div>
+        <div class="result-item" id="eurRow"><span>יורו (EUR):</span><span id="eurResult">0.00</span></div>
+        <div class="result-item" id="gbpRow"><span>ליש"ט (GBP):</span><span id="gbpResult">0.00</span></div>
+        <div class="result-item" id="hufRow"><span>פורינט (HUF):</span><span id="hufResult">0.00</span></div>
+        <div class="result-item" id="cnyRow"><span>יוהאן (CNY):</span><span id="cnyResult">0.00</span></div>
+    </div>
+
+    <div class="keypad">
+        <button class="key-btn" data-val="1">1</button>
+        <button class="key-btn" data-val="2">2</button>
+        <button class="key-btn" data-val="3">3</button>
+        <button class="key-btn" data-val="4">4</button>
+        <button class="key-btn" data-val="5">5</button>
+        <button class="key-btn" data-val="6">6</button>
+        <button class="key-btn" data-val="7">7</button>
+        <button class="key-btn" data-val="8">8</button>
+        <button class="key-btn" data-val="9">9</button>
+        <button class="key-btn action" data-val=".">.</button>
+        <button class="key-btn" data-val="0">0</button>
+        <button class="key-btn action" data-val="back">⌫</button>
+    </div>
+
+    <div class="footer-info">
+        <div id="statusMessage">טוען נתונים...</div>
+        <div id="updateTime" class="update-time">עדכון אחרון: ממתין...</div>
+        <div>גרסה: 8.0.0</div>
+    </div>
+</div>
+
+<div class="nav-overlay" id="navOverlay"></div>
+<div class="nav-menu" id="navMenu">
+    <div class="menu-header">הגדרות מתקדמות</div>
+    <div class="menu-item" id="btnRefresh">🔄 רענן שערים עכשיו</div>
+    <div class="menu-item" id="btnDeleteSettings">🗑️ מחק הגדרות והיסטוריה</div>
+    <div class="menu-item" id="btnDeleteData">⚠️ מחק שערי מטבע לוקאליים</div>
+    <div class="menu-item" id="btnForceUpdate" style="color: #dc3545;">⚡ עדכון גרסה כפוי (ניקוי מטמון)</div>
+</div>
+
+<div id="scannerModal" class="camera-modal">
+    <div style="padding: 15px; color: white; text-align: center; font-weight: bold; background: rgba(0,0,0,0.7); position: absolute; top: 0; width: 100%; z-index: 2; box-sizing: border-box;">
+        כוון את המחיר והמטבע אל תוך המסגרת
+        <div id="ocrStatus" style="font-size: 0.85rem; color: #ffc107; margin-top: 5px;">טוען מנוע זיהוי...</div>
+    </div>
+    
+    <div style="position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+        <video id="cameraFeed" autoplay playsinline style="min-width: 100%; min-height: 100%; object-fit: cover;"></video>
+        <div id="scanRegion" style="position: absolute; width: 260px; height: 90px; border: 3px solid #007bff; border-radius: 8px; box-shadow: 0 0 0 4000px rgba(0,0,0,0.65);"></div>
+        <canvas id="captureCanvas" style="display: none;"></canvas>
+    </div>
+    
+    <button id="btnCloseScanner" style="background: #dc3545; color: white; border: none; padding: 15px; font-size: 1.2rem; font-weight: bold; cursor: pointer; position: absolute; bottom: 30px; width: 80%; left: 10%; border-radius: 8px; z-index: 2; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">ביטול וסגירה</button>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="ocr-scanner.js"></script>
+<script src="app.js"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('Service Worker registered.'))
+                .catch(err => console.log('Service Worker failed.', err));
+        });
+    }
+</script>
+</body>
+</html>
